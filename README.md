@@ -7,57 +7,61 @@ one terminal and paste in another.
 A fork is `claude --resume <id> --fork-session`, started in the original
 conversation's directory. The original conversation is never touched.
 
-## Install
-
-```sh
-./install.sh            # every supported terminal found on this machine
-./install.sh rex        # or just some: rex, herdr, ghostty
-./install.sh --uninstall
-```
-
 Needs `jq`. `fzf` makes the picker nicer but is optional.
 
-The installer links `bin/agentfork` into `~/.local/bin` and adds one line to
-each terminal's config, backing the file up to `<file>.agentfork-backup`
-first:
+## Install for herdr
 
-| Terminal | What it changes |
-| --- | --- |
-| Rex | links `~/.config/rex/agentfork.lua`, adds `pcall(require, "agentfork")` to `init.lua`, reloads |
-| Ghostty | adds `config-file = ?…/adapters/ghostty/agentfork.ghostty` to its config, reloads |
-| herdr | `herdr plugin link adapters/herdr`; you add the keys (see below) |
+```sh
+herdr plugin install calebcauthon/handoff
+```
 
-## Keys
+That clones this repo into herdr's plugin directory and, as the plugin's build
+step, binds the keys below in `~/.config/herdr/config.toml` (the file is
+backed up to `config.toml.agentfork-backup` first). A key that is already
+bound to something else is left alone and reported, so you can choose another.
+New keys apply once herdr's client restarts (detach and reattach).
 
-| | Rex | herdr | Ghostty |
-| --- | --- | --- | --- |
-| Copy | `ctrl+b c` | your choice | `cmd+alt+c` |
-| Paste here | `ctrl+b v` | your choice | `cmd+alt+v` |
-| Fork to split | `ctrl+b shift+f`, `alt+shift+v` | your choice | `cmd+alt+f` |
-| Fork to tab | `ctrl+b f` | your choice | `cmd+alt+t` |
-
-"Paste here" types the fork command into the focused pane, so use it on a
-pane sitting at a shell prompt.
-
-herdr's keys usually belong to something already, so the installer only
-links the plugin. To bind its actions, add them to
-`~/.config/herdr/config.toml` and restart herdr's client (detach and
-reattach):
+The actions are `agentfork.copy`, `agentfork.paste`, `agentfork.fork` (tab)
+and `agentfork.fork-split`. To bind one yourself:
 
 ```toml
 [[keys.command]]
 key = "prefix+c"
 type = "plugin_action"
 command = "agentfork.copy"
-
-[[keys.command]]
-key = "prefix+v"
-type = "plugin_action"
-command = "agentfork.paste"
 ```
 
-The actions are `agentfork.copy`, `agentfork.paste`, `agentfork.fork` (tab)
-and `agentfork.fork-split`.
+## Install for Rex
+
+Rex has no plugin manager; `init.lua` loads Lua files that sit beside it. So:
+
+```sh
+git clone https://github.com/calebcauthon/handoff
+cd handoff
+make install rex
+```
+
+This links `bin/agentfork` into `~/.local/bin`, links
+`adapters/rex/agentfork.lua` to `~/.config/rex/agentfork.lua`, adds
+`pcall(require, "agentfork")` to `init.lua` (backed up first), and reloads Rex.
+The keys below come with it; rebind them in `init.lua` after the `require`.
+
+`make install` alone installs for every supported terminal found on this
+machine, `make install herdr` links a local clone as the herdr plugin and binds
+its keys, `make install ghostty` adds one `config-file` line to Ghostty's
+config, and `make uninstall` undoes all of it.
+
+## Keys
+
+| | Rex | herdr | Ghostty |
+| --- | --- | --- | --- |
+| Copy | `ctrl+b c` | `prefix+c` | `cmd+alt+c` |
+| Paste here | `ctrl+b v` | `prefix+v` | `cmd+alt+v` |
+| Fork to split | `ctrl+b shift+f`, `alt+shift+v` | `prefix+shift+f`, `alt+shift+v` | `cmd+alt+f` |
+| Fork to tab | `ctrl+b f` | `prefix+f` | `cmd+alt+t` |
+
+"Paste here" types the fork command into the focused pane, so use it on a
+pane sitting at a shell prompt.
 
 ## Which conversation gets copied
 
@@ -98,11 +102,13 @@ Environment: `AGENTFORK_ACTIVE_SECONDS` (default 30), `AGENTFORK_STATE_DIR`
 
 ```
 bin/agentfork              the CLI: finding, copying and starting forks
+herdr-plugin.toml          the herdr plugin manifest
+adapters/herdr/herdr.sh    herdr actions
+adapters/herdr/keys.sh     binds the herdr keys (the plugin's build step)
 adapters/rex/agentfork.lua Rex actions and keys
-adapters/herdr/            herdr plugin
 adapters/ghostty/          Ghostty keybindings
-install.sh                 install and uninstall
-tests/run.sh               tests against a fake ~/.claude
+Makefile, install.sh       install and uninstall
+tests/run.sh               tests against a fake ~/.claude and herdr config
 ```
 
 ## Not yet

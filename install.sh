@@ -19,17 +19,7 @@ REX_DIR="$CONFIG_HOME/rex"
 REX_LINE='pcall(require, "agentfork")'
 REX_OLD_LINE='require("agentfork")'
 GHOSTTY_LINE="config-file = ?$repo/adapters/ghostty/agentfork.ghostty"
-HERDR_KEYS='[[keys.command]]
-key = "prefix+c"
-type = "plugin_action"
-command = "agentfork.copy"
-description = "copy the conversation for agentfork"
-
-[[keys.command]]
-key = "prefix+v"
-type = "plugin_action"
-command = "agentfork.paste"
-description = "paste the copied conversation as a fork"'
+HERDR_KEYS="$repo/adapters/herdr/keys.sh"
 
 say() { printf '%s\n' "$*"; }
 step() { printf '\n== %s\n' "$*"; }
@@ -141,16 +131,16 @@ install_ghostty() {
 
 install_herdr() {
   step "herdr"
+  # A checkout installed with `herdr plugin install` is herdr's to manage, so
+  # linking is only for a local clone.
   if herdr plugin list 2>/dev/null | grep -q '^- agentfork '; then
-    say "plugin already linked"
+    say "plugin already installed"
   else
-    herdr plugin link "$repo/adapters/herdr" >/dev/null && say "linked herdr plugin agentfork"
+    herdr plugin link "$repo" >/dev/null && say "linked herdr plugin agentfork"
   fi
-  say "actions: agentfork.copy, agentfork.paste, agentfork.fork, agentfork.fork-split"
-  say "herdr keys are yours to choose, since they may already be taken. For example,"
-  say "in ~/.config/herdr/config.toml:"
-  printf '\n%s\n\n' "$HERDR_KEYS"
-  say "New keys need herdr's client restarted (detach and reattach)."
+  # herdr runs this itself as the plugin's build step on `herdr plugin
+  # install`, but not for a linked plugin.
+  bash "$HERDR_KEYS"
 }
 
 uninstall() {
@@ -163,10 +153,10 @@ uninstall() {
     reload_rex
   fi
   remove_line "$(ghostty_config)" "$GHOSTTY_LINE"
-  if has_herdr && herdr plugin list 2>/dev/null | grep -q '^- agentfork '; then
+  if has_herdr && herdr plugin list 2>/dev/null | grep -q '^- agentfork .*local:'; then
     herdr plugin unlink agentfork >/dev/null && say "unlinked herdr plugin agentfork"
-    say "remove any agentfork.* keys from ~/.config/herdr/config.toml yourself"
   fi
+  bash "$HERDR_KEYS" --remove
 }
 
 if [ "${1:-}" = --uninstall ]; then
