@@ -12,7 +12,7 @@
 # last 30 seconds is used, and when that is ambiguous the user picks.
 set -euo pipefail
 
-VERSION=0.1.0
+VERSION=0.2.0
 CLAUDE_HOME="${AGENTFORK_CLAUDE_HOME:-$HOME/.claude}"
 STATE_DIR="${AGENTFORK_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agentfork}"
 CLIPBOARD="$STATE_DIR/clipboard.json"
