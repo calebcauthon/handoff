@@ -1,0 +1,34 @@
+id = "agentfork"
+name = "agentfork"
+version = "0.1.0"
+min_herdr_version = "0.7.5"
+description = "Copy a Claude Code conversation and paste it as a fork into any pane, in herdr, Rex or Ghostty."
+platforms = ["linux", "macos"]
+
+[[actions]]
+id = "copy"
+title = "Copy conversation for fork"
+description = "Save the focused pane's Claude Code conversation to the agentfork clipboard."
+contexts = ["pane", "workspace"]
+command = ["bash", "herdr.sh", "copy"]
+
+[[actions]]
+id = "paste"
+title = "Paste conversation as fork"
+description = "Start a fork of the copied conversation in the focused pane (at a shell prompt)."
+contexts = ["pane", "workspace"]
+command = ["bash", "herdr.sh", "paste"]
+
+[[actions]]
+id = "fork"
+title = "Fork conversation into a tab"
+description = "Copy the focused pane's conversation and start a fork of it in a new tab."
+contexts = ["pane", "workspace"]
+command = ["bash", "herdr.sh", "fork-tab"]
+
+[[actions]]
+id = "fork-split"
+title = "Fork conversation into a split"
+description = "Copy the focused pane's conversation and start a fork of it in a split on the right."
+contexts = ["pane", "workspace"]
+command = ["bash", "herdr.sh", "fork-split"]

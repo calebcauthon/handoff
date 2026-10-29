@@ -1,0 +1,426 @@
+#!/usr/bin/env bash
+# agentfork: copy a Claude Code conversation and paste it as a fork in another
+# pane, in any terminal.
+#
+# Everything about Claude lives here. The terminal adapters (adapters/*) only
+# say which process is in the focused pane and where the fork should open.
+#
+# How a conversation is found: Claude Code writes ~/.claude/sessions/<pid>.json
+# for every running instance, holding its session ID and working directory.
+# Given the pid in a pane, that file names the conversation exactly. Without a
+# pid (Ghostty has no way to report one), the only conversation active in the
+# last 30 seconds is used, and when that is ambiguous the user picks.
+set -euo pipefail
+
+VERSION=0.1.0
+CLAUDE_HOME="${AGENTFORK_CLAUDE_HOME:-$HOME/.claude}"
+STATE_DIR="${AGENTFORK_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agentfork}"
+CLIPBOARD="$STATE_DIR/clipboard.json"
+ACTIVE_SECONDS="${AGENTFORK_ACTIVE_SECONDS:-30}"
+CLAUDE_BIN="${AGENTFORK_CLAUDE_BIN:-claude}"
+
+# Exit status meaning "more than one conversation could be meant and there is
+# no terminal to ask in". Adapters answer it by opening a pane with a picker.
+EXIT_PICK=3
+
+# Actions run by Rex or herdr inherit a minimal PATH.
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin:$HOME/.local/bin"
+
+NOTIFY=0
+QUIET=0
+PICK=0
+
+usage() {
+  cat <<'EOF'
+Usage: agentfork <command> [options]
+
+Commands:
+  copy    Save a conversation to the fork clipboard.
+  paste   Start a fork of the copied conversation in this terminal.
+  fork    Choose a conversation and start a fork of it here (copy + paste).
+  list    List running conversations, most recently active first.
+  show    Print the fork clipboard.
+
+Options for copy and fork:
+  --pid PID   A process in the focused pane, such as its shell or Claude
+              itself (repeatable). Its conversation is used if it has one.
+  --pick      Always ask which conversation.
+  --notify    Also report the result as a desktop notification.
+  --quiet     Print nothing on success.
+
+Options for paste:
+  --print     Print the command instead of running it.
+
+Options for list:
+  --json      One JSON object per line.
+
+Without --pid, copy and fork use the conversation that started the command
+(when run from Claude's ! shell mode), else the only conversation active in
+the last 30 seconds, else ask.
+EOF
+}
+
+notify() {
+  [ "$NOTIFY" = 1 ] || return 0
+  command -v osascript >/dev/null 2>&1 || return 0
+  osascript -e 'on run argv' \
+    -e 'display notification (item 2 of argv) with title (item 1 of argv)' \
+    -e 'end run' "$1" "$2" >/dev/null 2>&1 || true
+}
+
+die() {
+  printf 'agentfork: %s\n' "$1" >&2
+  notify "agentfork" "$1"
+  exit "${2:-1}"
+}
+
+say() {
+  [ "$QUIET" = 1 ] || printf '%s\n' "$*"
+}
+
+need() {
+  command -v "$1" >/dev/null 2>&1 || die "'$1' is required but was not found on PATH."
+}
+
+now() { date +%s; }
+
+if [ "$(uname)" = Darwin ]; then
+  mtime() { stat -f %m "$1"; }
+else
+  mtime() { stat -c %Y "$1"; }
+fi
+
+# A process's start time as Claude records it in procStart, or nothing when
+# the process isn't running.
+proc_start() {
+  TZ=UTC ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/ $//'
+}
+
+short() {
+  case "$1" in
+    "$HOME") printf '~' ;;
+    "$HOME"/*) printf '%s/%s' "~" "${1#"$HOME"/}" ;;
+    *) printf '%s' "$1" ;;
+  esac
+}
+
+age() {
+  local s=$(($(now) - $1))
+  [ "$s" -ge 0 ] || s=0
+  if [ "$s" -lt 60 ]; then
+    printf '%ss' "$s"
+  elif [ "$s" -lt 3600 ]; then
+    printf '%sm' $((s / 60))
+  elif [ "$s" -lt 86400 ]; then
+    printf '%sh' $((s / 3600))
+  else
+    printf '%sd' $((s / 86400))
+  fi
+}
+
+# The transcript of session $1 started in directory $2. Claude stores it under
+# the directory's path with every non-alphanumeric character turned into "-".
+transcript_for() {
+  local f
+  f="$CLAUDE_HOME/projects/$(printf '%s' "$2" | sed 's/[^A-Za-z0-9]/-/g')/$1.jsonl"
+  if [ -f "$f" ]; then
+    printf '%s' "$f"
+    return 0
+  fi
+  for f in "$CLAUDE_HOME"/projects/*/"$1.jsonl"; do
+    if [ -f "$f" ]; then
+      printf '%s' "$f"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Load the conversation of Claude process $1 into the R_* variables.
+# Returns 0 when it can be forked, 2 when it is a live Claude process with no
+# messages yet, and 1 when the pid isn't a live interactive Claude process.
+load_pid() {
+  local file="$CLAUDE_HOME/sessions/$1.json" fields rec_start kind started t
+  [ -f "$file" ] || return 1
+  fields="$(jq -r '[.sessionId // "", .cwd // "", .name // "", .status // "",
+      ((.updatedAt // 0) / 1000 | floor | tostring), .procStart // "", .kind // ""]
+      | join("\u001f")' "$file" 2>/dev/null)" || return 1
+  IFS=$'\x1f' read -r R_ID R_CWD R_NAME R_STATUS R_UPDATED rec_start kind <<<"$fields"
+  [ -n "$R_ID" ] || return 1
+  [ -z "$kind" ] || [ "$kind" = interactive ] || return 1
+
+  # The file outlives its process, and pids get reused.
+  started="$(proc_start "$1")"
+  [ -n "$started" ] || return 1
+  if [ -n "$rec_start" ] && [ "$(printf '%s' "$rec_start" | tr -s ' ')" != "$started" ]; then
+    return 1
+  fi
+
+  R_TRANSCRIPT="$(transcript_for "$R_ID" "$R_CWD")" || return 2
+  t="$(mtime "$R_TRANSCRIPT")"
+  R_ACTIVE=$((t > R_UPDATED ? t : R_UPDATED))
+  return 0
+}
+
+descendants() {
+  local queue next p c
+  queue=("$1")
+  while [ ${#queue[@]} -gt 0 ]; do
+    next=()
+    for p in "${queue[@]}"; do
+      for c in $(pgrep -P "$p" 2>/dev/null || true); do
+        printf '%s\n' "$c"
+        next+=("$c")
+      done
+    done
+    queue=(${next[@]+"${next[@]}"})
+  done
+}
+
+# Load the conversation in one of the given processes or their descendants.
+# Dies when the pane's Claude has no messages yet, rather than falling back to
+# some other conversation the user didn't point at.
+resolve_pids() {
+  local p c rc empty=0
+  for p in "$@"; do
+    for c in "$p" $(descendants "$p"); do
+      rc=0
+      load_pid "$c" || rc=$?
+      [ "$rc" = 0 ] && return 0
+      [ "$rc" = 2 ] && empty=1
+    done
+  done
+  [ "$empty" = 0 ] || die "this Claude conversation has no messages yet, so there is nothing to fork."
+  return 1
+}
+
+# Load the Claude process this command runs under, as with `!agentfork copy`.
+ancestor_session() {
+  local p="$PPID" i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    [ -n "$p" ] && [ "$p" -gt 1 ] || return 1
+    if load_pid "$p"; then
+      return 0
+    fi
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+  done
+  return 1
+}
+
+# Every forkable conversation as "active<TAB>pid" lines, most recent first.
+candidates() {
+  local f pid
+  for f in "$CLAUDE_HOME"/sessions/*.json; do
+    [ -f "$f" ] || continue
+    pid="${f##*/}"
+    pid="${pid%.json}"
+    case "$pid" in '' | *[!0-9]*) continue ;; esac
+    if load_pid "$pid"; then
+      printf '%s\t%s\n' "$R_ACTIVE" "$pid"
+    fi
+  done | sort -rn
+}
+
+# The last thing the user typed in transcript $1, on one line.
+preview() {
+  tail -n 400 "$1" 2>/dev/null | jq -Rrs '
+    [ split("\n")[] | fromjson? | select(.type == "user") | .message.content
+      | if type == "string" then .
+        elif type == "array" then [ .[] | select(.type == "text") | .text ] | join(" ")
+        else "" end
+      | select(length > 0) | select(startswith("<") or startswith("Base directory for this skill:") | not) ]
+    | last // "" | gsub("\\s+"; " ") | .[0:80]' 2>/dev/null || true
+}
+
+has_tty() {
+  [ "${AGENTFORK_NO_TTY:-}" != 1 ] && { : </dev/tty; } 2>/dev/null
+}
+
+label() {
+  printf '%-4s %-5s %-18s %-30s %s' "$(age "$R_ACTIVE")" "$R_STATUS" \
+    "$(printf '%s' "$R_NAME" | cut -c1-18)" "$(short "$R_CWD" | cut -c1-30)" \
+    "$(preview "$R_TRANSCRIPT")"
+}
+
+# Ask which of the candidates on stdin to use, and load it.
+pick() {
+  local lines="" pid choice i n
+  while IFS=$'\t' read -r _ pid; do
+    load_pid "$pid" || continue
+    lines+="$pid"$'\t'"$(label)"$'\n'
+  done
+  [ -n "$lines" ] || return 1
+
+  if command -v fzf >/dev/null 2>&1; then
+    choice="$(printf '%s' "$lines" | fzf --delimiter=$'\t' --with-nth=2 --no-sort \
+      --reverse --prompt='fork which conversation? ')" || return 1
+  else
+    i=0
+    printf 'Fork which conversation?\n' >/dev/tty
+    while IFS=$'\t' read -r pid choice; do
+      i=$((i + 1))
+      printf '%3d) %s\n' "$i" "$choice" >/dev/tty
+    done <<<"${lines%$'\n'}"
+    printf 'Number: ' >/dev/tty
+    read -r n </dev/tty || return 1
+    case "$n" in '' | *[!0-9]*) return 1 ;; esac
+    choice="$(printf '%s' "$lines" | sed -n "${n}p")"
+    [ -n "$choice" ] || return 1
+  fi
+  load_pid "${choice%%$'\t'*}"
+}
+
+# Load into R_* the conversation the user means.
+choose() {
+  local all recent
+  if [ $# -gt 0 ] && resolve_pids "$@"; then
+    return 0
+  fi
+  if [ "$PICK" != 1 ] && ancestor_session; then
+    return 0
+  fi
+
+  all="$(candidates)"
+  [ -n "$all" ] || die "no Claude Code conversations are running."
+  if [ "$PICK" != 1 ]; then
+    if [ "$(printf '%s\n' "$all" | wc -l)" -eq 1 ]; then
+      load_pid "${all#*$'\t'}"
+      return 0
+    fi
+    recent="$(printf '%s\n' "$all" | awk -F'\t' -v c=$(($(now) - ACTIVE_SECONDS)) '$1 >= c')"
+    if [ -n "$recent" ] && [ "$(printf '%s\n' "$recent" | wc -l)" -eq 1 ]; then
+      load_pid "${recent#*$'\t'}"
+      return 0
+    fi
+  fi
+
+  if ! has_tty; then
+    printf 'agentfork: several conversations could be meant and there is no terminal to ask in.\n' >&2
+    exit "$EXIT_PICK"
+  fi
+  pick <<<"$all" || die "cancelled."
+}
+
+describe() {
+  printf '%s in %s' "${R_NAME:-conversation}" "$(short "$R_CWD")"
+  [ -z "$1" ] || printf ' ("%s")' "$1"
+}
+
+save() {
+  local tmp="$CLIPBOARD.$$"
+  mkdir -p "$STATE_DIR"
+  chmod 700 "$STATE_DIR" 2>/dev/null || true
+  (
+    umask 077
+    jq -n --arg id "$R_ID" --arg cwd "$R_CWD" --arg name "$R_NAME" --arg preview "$1" \
+      --argjson at "$(now)" \
+      '{agent: "claude", session_id: $id, cwd: $cwd, name: $name, preview: $preview, copied_at: $at}' >"$tmp"
+  )
+  mv -f "$tmp" "$CLIPBOARD"
+}
+
+parse_choose_args() {
+  PIDS=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --pid)
+        [ $# -ge 2 ] || die "--pid needs a value."
+        case "$2" in '' | *[!0-9]*) die "--pid needs a number, got '$2'." ;; esac
+        PIDS+=("$2")
+        shift 2
+        ;;
+      --pick) PICK=1; shift ;;
+      --notify) NOTIFY=1; shift ;;
+      --quiet) QUIET=1; shift ;;
+      *) die "unknown option '$1'. See 'agentfork --help'." ;;
+    esac
+  done
+}
+
+cmd_copy() {
+  local p
+  parse_choose_args "$@"
+  choose ${PIDS[@]+"${PIDS[@]}"}
+  p="$(preview "$R_TRANSCRIPT")"
+  save "$p"
+  say "copied $(describe "$p")"
+  notify "Conversation copied" "$(describe "$p")"
+}
+
+cmd_paste() {
+  local print=0 id cwd name
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --print) print=1; shift ;;
+      *) die "unknown option '$1'. See 'agentfork --help'." ;;
+    esac
+  done
+  [ -f "$CLIPBOARD" ] || die "nothing copied yet. Copy a conversation first."
+  id="$(jq -r '.session_id // empty' "$CLIPBOARD")"
+  cwd="$(jq -r '.cwd // empty' "$CLIPBOARD")"
+  name="$(jq -r '.name // empty' "$CLIPBOARD")"
+  [ -n "$id" ] || die "the fork clipboard is empty or damaged: $CLIPBOARD"
+
+  if [ "$print" = 1 ]; then
+    [ -z "$cwd" ] || printf 'cd %q && ' "$cwd"
+    printf '%q --resume %q --fork-session\n' "$CLAUDE_BIN" "$id"
+    return 0
+  fi
+
+  command -v "$CLAUDE_BIN" >/dev/null 2>&1 || die "'$CLAUDE_BIN' was not found on PATH."
+  # Fork in the original directory so the branch sees the same files.
+  if [ -n "$cwd" ]; then
+    cd "$cwd" 2>/dev/null || printf 'agentfork: %s no longer exists; forking here.\n' "$cwd" >&2
+  fi
+  printf 'agentfork: forking %s\n' "${name:-$id}" >&2
+  exec "$CLAUDE_BIN" --resume "$id" --fork-session
+}
+
+cmd_fork() {
+  parse_choose_args "$@"
+  choose ${PIDS[@]+"${PIDS[@]}"}
+  save "$(preview "$R_TRANSCRIPT")"
+  cmd_paste
+}
+
+cmd_list() {
+  local json=0 pid
+  case "${1:-}" in
+    --json) json=1 ;;
+    '') ;;
+    *) die "unknown option '$1'. See 'agentfork --help'." ;;
+  esac
+  candidates | while IFS=$'\t' read -r _ pid; do
+    load_pid "$pid" || continue
+    if [ "$json" = 1 ]; then
+      jq -cn --argjson pid "$pid" --arg id "$R_ID" --arg cwd "$R_CWD" --arg name "$R_NAME" \
+        --arg status "$R_STATUS" --argjson active "$R_ACTIVE" --arg preview "$(preview "$R_TRANSCRIPT")" \
+        '{pid: $pid, session_id: $id, cwd: $cwd, name: $name, status: $status, active_at: $active, preview: $preview}'
+    else
+      printf '%-7s %s\n' "$pid" "$(label)"
+    fi
+  done
+}
+
+cmd_show() {
+  [ -f "$CLIPBOARD" ] || die "nothing copied yet."
+  jq . "$CLIPBOARD"
+}
+
+main() {
+  need jq
+  local cmd="${1:-}"
+  [ $# -eq 0 ] || shift
+  case "$cmd" in
+    copy) cmd_copy "$@" ;;
+    paste) cmd_paste "$@" ;;
+    fork) cmd_fork "$@" ;;
+    list | ls) cmd_list "$@" ;;
+    show) cmd_show "$@" ;;
+    -h | --help | help | '') usage ;;
+    -V | --version) printf 'agentfork %s\n' "$VERSION" ;;
+    *) die "unknown command '$cmd'. See 'agentfork --help'." ;;
+  esac
+}
+
+main "$@"
