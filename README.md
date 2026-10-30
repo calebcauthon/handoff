@@ -9,9 +9,10 @@ Needs `jq`. `fzf` is optional.
 
 ```sh
 herdr plugin install calebcauthon/handoff
+herdr server reload-config
 ```
 
-Then detach and reattach.
+Keys: `prefix+c` copy, `prefix+v` paste, `prefix+→` fork into a split.
 
 ## Rex
 
@@ -20,6 +21,8 @@ git clone https://github.com/calebcauthon/handoff && cd handoff
 make install rex
 ```
 
+Keys: `ctrl+b c` copy, `ctrl+b v` paste, `ctrl+b →` fork into a split.
+
 ## Ghostty
 
 ```sh
@@ -27,13 +30,9 @@ git clone https://github.com/calebcauthon/handoff && cd handoff
 make install ghostty
 ```
 
-## Keys
+Keys: `cmd+alt+c` copy, `cmd+alt+v` paste, `cmd+alt+→` fork into a split.
 
-| | Rex | herdr | Ghostty |
-| --- | --- | --- | --- |
-| Copy | `ctrl+b c` | `prefix+c` | `cmd+alt+c` |
-| Paste here | `ctrl+b v` | `prefix+v` | `cmd+alt+v` |
-| Fork into a split | `ctrl+b →` | `prefix+→` | `cmd+alt+→` |
+## How it works
 
 Fork copies the pane you're in and pastes it into a new split on the right.
 Paste into a pane sitting at a shell prompt. The fork is `claude --resume <id>

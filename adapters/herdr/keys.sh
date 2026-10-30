@@ -25,6 +25,17 @@ backup() {
   return 0
 }
 
+# Make the running herdr pick the keys up, when there is one and this is the
+# real config.
+reload() {
+  [ -z "${AGENTFORK_HERDR_CONFIG:-}" ] || return 0
+  if herdr server reload-config >/dev/null 2>&1; then
+    say "agentfork: reloaded herdr config"
+  else
+    say "agentfork: keys apply after: herdr server reload-config"
+  fi
+}
+
 # Uncommented lines of the config.
 live() { [ -f "$CONFIG" ] && grep -v '^[[:space:]]*#' "$CONFIG" || true; }
 
@@ -66,7 +77,8 @@ add() {
     added=1
   done <<<"$KEYS"
   if [ "$added" = 1 ]; then
-    say "agentfork: keys added to $CONFIG; they apply once herdr's client restarts (detach and reattach)."
+    say "agentfork: keys added to $CONFIG"
+    reload
   elif [ "$skipped" = 0 ]; then
     say "agentfork: keys already bound in $CONFIG"
   fi
@@ -101,7 +113,8 @@ remove() {
     END { n = NR; while (n > 0 && line[n] ~ /^[[:space:]]*$/) n--; for (i = 1; i <= n; i++) print line[i] }
   ' >"$CONFIG.agentfork-tmp"
   mv "$CONFIG.agentfork-tmp" "$CONFIG"
-  say "agentfork: removed agentfork keys from $CONFIG; herdr's client picks that up when it restarts."
+  say "agentfork: removed agentfork keys from $CONFIG"
+  reload
 }
 
 case "${1:-}" in
