@@ -20,6 +20,13 @@ git clone https://github.com/calebcauthon/handoff && cd handoff
 make install rex
 ```
 
+## Ghostty
+
+```sh
+git clone https://github.com/calebcauthon/handoff && cd handoff
+make install ghostty
+```
+
 ## Keys
 
 | | Rex | herdr | Ghostty |
@@ -36,9 +43,8 @@ seconds, or asks.
 
 ## More
 
-`make install` installs for every terminal found, `make install ghostty` for
-Ghostty, `make uninstall` undoes it. Keys already bound to something else are
-left alone and reported.
+`make install` installs for every terminal found; `make uninstall` undoes it.
+Keys already bound to something else are left alone and reported.
 
 ```
 agentfork copy [--pid PID]... [--pick] [--notify] [--quiet]
