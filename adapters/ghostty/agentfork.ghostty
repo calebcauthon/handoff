@@ -17,3 +17,7 @@ keybind = chain=text:exec agentfork copy --notify\r
 
 # Paste: start a fork of the copied conversation in this pane (at a shell prompt).
 keybind = cmd+alt+v=text:agentfork paste\r
+
+# Fork: copy the active conversation and paste it into a split on the right.
+keybind = cmd+alt+right=new_split:right
+keybind = chain=text:agentfork fork\r

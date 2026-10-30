@@ -119,14 +119,14 @@ install_rex() {
     add_line "$REX_DIR/init.lua" "$REX_LINE"
   fi
   reload_rex
-  say "keys: ctrl+b>c copy, ctrl+b>v paste"
+  say "keys: ctrl+b>c copy, ctrl+b>v paste, ctrl+b>right fork into a split"
 }
 
 install_ghostty() {
   step "Ghostty"
   add_line "$(ghostty_config)" "$GHOSTTY_LINE"
   reload_ghostty
-  say "keys: cmd+alt+c copy, cmd+alt+v paste"
+  say "keys: cmd+alt+c copy, cmd+alt+v paste, cmd+alt+right fork into a split"
 }
 
 install_herdr() {

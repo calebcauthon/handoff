@@ -152,6 +152,14 @@ check "paste runs in the conversation's directory" [ "$(cat "$tmp/claude.pwd")" 
 printed="$("$AF" paste --print)"
 check "paste --print quotes the directory" grep -q 'my\\ project' <<<"$printed"
 
+# --- fork = copy + paste ----------------------------------------------------
+reset
+rm -f "$tmp/claude.argv"
+session "$b" eeee /work/two 5
+"$AF" fork --pid "$b" 2>/dev/null
+check "fork starts the fork" grep -q eeee "$tmp/claude.argv"
+check "fork also fills the clipboard" [ "$(copied_id)" = eeee ]
+
 # --- list shows live conversations only -------------------------------------
 reset
 session "$a" aaaa /work/one 5

@@ -9,10 +9,12 @@
 -- Claude and the choice is ambiguous, a picker opens in a split below.
 --
 -- Keys:
---   ctrl+b>c    copy the conversation in this pane
---   ctrl+b>v    paste: start the fork in this pane (at a shell prompt)
--- Rebind them after the require; the actions are agentfork_copy and
--- agentfork_paste.
+--   ctrl+b>c        copy the conversation in this pane
+--   ctrl+b>v        paste: start the fork in this pane (at a shell prompt)
+--   ctrl+b>right    fork: copy this pane's conversation and paste it into a
+--                   new split on the right
+-- Rebind them after the require; the actions are agentfork_copy,
+-- agentfork_paste and agentfork_fork.
 
 local BIN = os.getenv("AGENTFORK_BIN") or (os.getenv("HOME") .. "/.local/bin/agentfork")
 local TERMINAL = "com.superlogical.terminal"
@@ -45,11 +47,11 @@ local function copy(block_id)
   error(r.stderr ~= "" and r.stderr or ("agentfork exited with status " .. r.code), 0)
 end
 
--- Open a shell below the block and type a command into it.
-local function open_below(ctx, command)
+-- Open a shell beside the block ("down" or "right") and type a command into it.
+local function open(where, ctx, command)
   local _, err = rex.session.new_split{
     anchor_id = ctx.block_id,
-    direction = "vertical",
+    direction = where == "down" and "vertical" or "horizontal",
     side      = "after",
     layout    = rex.layout.block{
       flavor  = SHELL,
@@ -68,7 +70,7 @@ rex.action{
   run      = function(ctx)
     if not copy(ctx.block_id) then
       -- exec, so the picker's pane closes once a conversation is chosen.
-      open_below(ctx, "exec " .. q(BIN) .. " copy --pick --notify")
+      open("down", ctx, "exec " .. q(BIN) .. " copy --pick --notify")
     end
   end,
 }
@@ -87,5 +89,20 @@ rex.action{
   end,
 }
 
+rex.action{
+  name     = "agentfork_fork",
+  title    = "Fork Conversation into Split",
+  category = "agentfork",
+  keywords = "claude fork split session",
+  run      = function(ctx)
+    if copy(ctx.block_id) then
+      open("right", ctx, q(BIN) .. " paste")
+    else
+      open("right", ctx, q(BIN) .. " fork --pick")
+    end
+  end,
+}
+
 rex.bind("ctrl+b>c", "agentfork_copy")
 rex.bind("ctrl+b>v", "agentfork_paste")
+rex.bind("ctrl+b>right", "agentfork_fork")
