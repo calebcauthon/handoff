@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# agentfork for herdr. Usage: herdr.sh copy|paste|fork-tab|fork-split
+# agentfork for herdr. Usage: herdr.sh copy|paste
 #
 # herdr reports the processes in a pane, so copy always takes the focused
 # pane's conversation. When the pane isn't running Claude and the choice is
@@ -55,29 +55,14 @@ copy() {
   return "$rc"
 }
 
-# Run a command in a new pane: "split-right", "split-down" or "tab".
-open_with() {
-  local where="$1" pane="$2" command="$3" out new
-  case "$where" in
-    tab) out="$("$HERDR" tab create --focus)" ;;
-    split-down) out="$("$HERDR" pane split --pane "$pane" --direction down --focus)" ;;
-    *) out="$("$HERDR" pane split --pane "$pane" --direction right --focus)" ;;
-  esac
+# Run a command in a new split below the pane.
+open_below() {
+  local pane="$1" command="$2" out new
+  out="$("$HERDR" pane split --pane "$pane" --direction down --focus)"
   new="$(printf '%s' "$out" | jq -r --arg old "$pane" '
     [.. | objects | .pane_id? // empty | select(. != $old)][0] // empty')"
   [ -n "$new" ] || fail "could not open a new pane."
   "$HERDR" pane run "$new" "$command" >/dev/null
-}
-
-fork() {
-  local where="$1" pane rc=0
-  pane="$(pane_id)"
-  copy "$pane" || rc=$?
-  if [ "$rc" = 0 ]; then
-    open_with "$where" "$pane" "$(q "$BIN") paste"
-  else
-    open_with "$where" "$pane" "$(q "$BIN") fork --pick"
-  fi
 }
 
 case "${1:-}" in
@@ -86,15 +71,13 @@ case "${1:-}" in
     rc=0
     copy "$pane" || rc=$?
     # exec, so the picker's pane closes once a conversation is chosen.
-    [ "$rc" != 3 ] || open_with split-down "$pane" "exec $(q "$BIN") copy --pick --notify"
+    [ "$rc" != 3 ] || open_below "$pane" "exec $(q "$BIN") copy --pick --notify"
     ;;
   paste)
     "$HERDR" pane run "$(pane_id)" "$(q "$BIN") paste" >/dev/null
     ;;
-  fork-tab) fork tab ;;
-  fork-split) fork split-right ;;
   *)
-    echo "usage: herdr.sh copy|paste|fork-tab|fork-split" >&2
+    echo "usage: herdr.sh copy|paste" >&2
     exit 2
     ;;
 esac

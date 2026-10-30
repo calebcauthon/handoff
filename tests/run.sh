@@ -152,14 +152,6 @@ check "paste runs in the conversation's directory" [ "$(cat "$tmp/claude.pwd")" 
 printed="$("$AF" paste --print)"
 check "paste --print quotes the directory" grep -q 'my\\ project' <<<"$printed"
 
-# --- fork = copy + paste ----------------------------------------------------
-reset
-rm -f "$tmp/claude.argv"
-session "$b" eeee /work/two 5
-"$AF" fork --pid "$b" 2>/dev/null
-check "fork starts the fork" grep -q eeee "$tmp/claude.argv"
-check "fork also fills the clipboard" [ "$(copied_id)" = eeee ]
-
 # --- list shows live conversations only -------------------------------------
 reset
 session "$a" aaaa /work/one 5
@@ -181,7 +173,7 @@ export AGENTFORK_HERDR_CONFIG="$tmp/herdr/config.toml"
 mkdir -p "$tmp/herdr"
 cat >"$AGENTFORK_HERDR_CONFIG" <<'EOF'
 [keys]
-new_tab = "prefix+f"
+new_tab = "prefix+v"
 
 [[keys.command]]
 key = "prefix+x"
@@ -190,8 +182,8 @@ command = "echo hi"
 EOF
 out="$(bash "$KEYS")"
 check "keys: binds free keys" grep -q 'command = "agentfork.copy"' "$AGENTFORK_HERDR_CONFIG"
-check "keys: skips a taken key" grep -q 'prefix+f is already bound' <<<"$out"
-check "keys: taken key stays unbound" [ "$(grep -c 'command = "agentfork.fork"$' "$AGENTFORK_HERDR_CONFIG")" = 0 ]
+check "keys: skips a taken key" grep -q 'prefix+v is already bound' <<<"$out"
+check "keys: taken key stays unbound" [ "$(grep -c 'command = "agentfork.paste"$' "$AGENTFORK_HERDR_CONFIG")" = 0 ]
 check "keys: backs the config up" [ -f "$AGENTFORK_HERDR_CONFIG.agentfork-backup" ]
 check "keys: valid toml" python3 -c 'import sys,tomllib; tomllib.load(open(sys.argv[1],"rb"))' "$AGENTFORK_HERDR_CONFIG"
 before="$(cat "$AGENTFORK_HERDR_CONFIG")"
@@ -200,7 +192,7 @@ check "keys: second run changes nothing" [ "$(cat "$AGENTFORK_HERDR_CONFIG")" = 
 bash "$KEYS" --remove >/dev/null
 check "keys: --remove drops agentfork keys" [ "$(grep -c agentfork "$AGENTFORK_HERDR_CONFIG")" = 0 ]
 check "keys: --remove keeps other keys" grep -q 'echo hi' "$AGENTFORK_HERDR_CONFIG"
-check "keys: --remove keeps [keys] table" grep -q 'new_tab = "prefix+f"' "$AGENTFORK_HERDR_CONFIG"
+check "keys: --remove keeps [keys] table" grep -q 'new_tab = "prefix+v"' "$AGENTFORK_HERDR_CONFIG"
 
 rm -f "$AGENTFORK_HERDR_CONFIG"
 bash "$KEYS" >/dev/null

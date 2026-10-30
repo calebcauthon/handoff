@@ -4,9 +4,9 @@
 #   config-file = ?/path/to/agentfork/adapters/ghostty/agentfork.ghostty
 #
 # Ghostty can't tell agentfork which process the focused pane holds, so copy
-# and fork use the only conversation active in the last 30 seconds, and show a
-# picker when that is ambiguous. Keybindings can't run programs, so each one
-# opens a split or tab and types an agentfork command into its shell.
+# uses the only conversation active in the last 30 seconds, and shows a picker
+# when that is ambiguous. Keybindings can't run programs, so copy opens a split
+# and types the agentfork command into its shell.
 #
 # These use cmd+alt so they don't collide with herdr's ctrl+b prefix when
 # herdr runs inside Ghostty.
@@ -17,11 +17,3 @@ keybind = chain=text:exec agentfork copy --notify\r
 
 # Paste: start a fork of the copied conversation in this pane (at a shell prompt).
 keybind = cmd+alt+v=text:agentfork paste\r
-
-# Fork into a split on the right.
-keybind = cmd+alt+f=new_split:right
-keybind = chain=text:agentfork fork\r
-
-# Fork into a new tab.
-keybind = cmd+alt+t=new_tab
-keybind = chain=text:agentfork fork\r

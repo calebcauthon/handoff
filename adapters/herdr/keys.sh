@@ -15,10 +15,7 @@ MARK="# agentfork keys. Remove them with: bash adapters/herdr/keys.sh --remove"
 
 # key | action | description
 KEYS='prefix+c|copy|copy the conversation in this pane for agentfork
-prefix+v|paste|paste the copied conversation here as a fork
-prefix+f|fork|fork the conversation in this pane into a new tab
-prefix+shift+f|fork-split|fork the conversation in this pane into a split
-alt+shift+v|fork-split|fork the conversation in this pane into a split'
+prefix+v|paste|paste the copied conversation here as a fork'
 
 say() { printf '%s\n' "$*"; }
 

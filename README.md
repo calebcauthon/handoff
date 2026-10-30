@@ -21,8 +21,10 @@ backed up to `config.toml.agentfork-backup` first). A key that is already
 bound to something else is left alone and reported, so you can choose another.
 New keys apply once herdr's client restarts (detach and reattach).
 
-The actions are `agentfork.copy`, `agentfork.paste`, `agentfork.fork` (tab)
-and `agentfork.fork-split`. To bind one yourself:
+From a local clone, `make install herdr` does the same with `herdr plugin
+link` instead. Either way herdr's server has to be running.
+
+The actions are `agentfork.copy` and `agentfork.paste`. To bind one yourself:
 
 ```toml
 [[keys.command]]
@@ -57,8 +59,6 @@ config, and `make uninstall` undoes all of it.
 | --- | --- | --- | --- |
 | Copy | `ctrl+b c` | `prefix+c` | `cmd+alt+c` |
 | Paste here | `ctrl+b v` | `prefix+v` | `cmd+alt+v` |
-| Fork to split | `ctrl+b shift+f`, `alt+shift+v` | `prefix+shift+f`, `alt+shift+v` | `cmd+alt+f` |
-| Fork to tab | `ctrl+b f` | `prefix+f` | `cmd+alt+t` |
 
 "Paste here" types the fork command into the focused pane, so use it on a
 pane sitting at a shell prompt.
@@ -85,7 +85,6 @@ The adapters are thin. Everything about Claude lives in `bin/agentfork`:
 ```
 agentfork copy [--pid PID]... [--pick] [--notify] [--quiet]
 agentfork paste [--print]
-agentfork fork [--pid PID]... [--pick]     # copy + paste
 agentfork list [--json]
 agentfork show
 ```

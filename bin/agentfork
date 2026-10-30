@@ -37,11 +37,10 @@ Usage: agentfork <command> [options]
 Commands:
   copy    Save a conversation to the fork clipboard.
   paste   Start a fork of the copied conversation in this terminal.
-  fork    Choose a conversation and start a fork of it here (copy + paste).
   list    List running conversations, most recently active first.
   show    Print the fork clipboard.
 
-Options for copy and fork:
+Options for copy:
   --pid PID   A process in the focused pane, such as its shell or Claude
               itself (repeatable). Its conversation is used if it has one.
   --pick      Always ask which conversation.
@@ -54,7 +53,7 @@ Options for paste:
 Options for list:
   --json      One JSON object per line.
 
-Without --pid, copy and fork use the conversation that started the command
+Without --pid, copy uses the conversation that started the command
 (when run from Claude's ! shell mode), else the only conversation active in
 the last 30 seconds, else ask.
 EOF
@@ -376,13 +375,6 @@ cmd_paste() {
   exec "$CLAUDE_BIN" --resume "$id" --fork-session
 }
 
-cmd_fork() {
-  parse_choose_args "$@"
-  choose ${PIDS[@]+"${PIDS[@]}"}
-  save "$(preview "$R_TRANSCRIPT")"
-  cmd_paste
-}
-
 cmd_list() {
   local json=0 pid
   case "${1:-}" in
@@ -414,7 +406,6 @@ main() {
   case "$cmd" in
     copy) cmd_copy "$@" ;;
     paste) cmd_paste "$@" ;;
-    fork) cmd_fork "$@" ;;
     list | ls) cmd_list "$@" ;;
     show) cmd_show "$@" ;;
     -h | --help | help | '') usage ;;
