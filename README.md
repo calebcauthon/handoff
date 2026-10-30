@@ -5,7 +5,25 @@ Works in Rex, herdr and Ghostty; the clipboard is shared between them.
 
 Needs `jq`. `fzf` is optional.
 
-## herdr
+## Herdr
+
+Ask your agent, in Herdr:
+
+```
+Read ~/.config/herdr-app/AGENTS.md, then add this mod: herdr.dev/mods/calebcauthon/handoff
+```
+
+or from a clone:
+
+```sh
+git clone https://github.com/calebcauthon/handoff && cd handoff
+make install herdr
+```
+
+Keys: `cmd+alt+c` copy, `cmd+alt+v` paste, `cmd+alt+f` fork into a split.
+A strip at the bottom shows what's on the fork clipboard.
+
+## Herdr TUI
 
 ```sh
 herdr plugin install calebcauthon/handoff

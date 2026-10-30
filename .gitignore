@@ -1,2 +1,5 @@
 .DS_Store
 .serena/
+# written next to a mod by herdr-app check
+herdr-app/mods/*/gpui-kit.d.ts
+herdr-app/mods/*/jsconfig.json

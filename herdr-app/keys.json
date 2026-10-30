@@ -1,0 +1,4 @@
+{
+  "global": { "cmd-alt-a": "mod.open:handoff" },
+  "terminal": { "cmd-alt-a": "mod.open:handoff" }
+}
