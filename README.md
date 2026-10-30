@@ -25,6 +25,9 @@ Keys: `ctrl+b c` copy, `ctrl+b v` paste, `ctrl+b →` fork into a split.
 
 ## Ghostty
 
+Needs [skhd](https://github.com/jackielii/skhd.zig), since Ghostty's own
+keybindings can't run programs.
+
 ```sh
 git clone https://github.com/calebcauthon/handoff && cd handoff
 make install ghostty

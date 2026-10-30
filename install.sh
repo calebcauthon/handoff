@@ -18,7 +18,10 @@ REX_DIR="$CONFIG_HOME/rex"
 # shared through dotfiles. The plain require is what older installs added.
 REX_LINE='pcall(require, "agentfork")'
 REX_OLD_LINE='require("agentfork")'
-GHOSTTY_LINE="config-file = ?$repo/adapters/ghostty/agentfork.ghostty"
+# Ghostty keys are skhd hotkeys (see adapters/ghostty/agentfork.skhdrc).
+SKHD_LINE=".load \"$repo/adapters/ghostty/agentfork.skhdrc\""
+# What installs before 0.3 added to Ghostty's own config.
+GHOSTTY_OLD_LINE="config-file = ?$repo/adapters/ghostty/agentfork.ghostty"
 HERDR_KEYS="$repo/adapters/herdr/keys.sh"
 
 say() { printf '%s\n' "$*"; }
@@ -46,6 +49,15 @@ ghostty_config() {
   fi
 }
 
+# skhd reads ~/.config/skhd/skhdrc, or the older ~/.skhdrc.
+skhd_config() {
+  if [ -f "$CONFIG_HOME/skhd/skhdrc" ] || [ ! -f "$HOME/.skhdrc" ]; then
+    printf '%s' "$CONFIG_HOME/skhd/skhdrc"
+  else
+    printf '%s' "$HOME/.skhdrc"
+  fi
+}
+
 has_rex() { [ -d "$REX_DIR" ] || rex_cli >/dev/null || ls -d /Applications/Rex*.app >/dev/null 2>&1; }
 has_ghostty() { command -v ghostty >/dev/null 2>&1 || [ -d /Applications/Ghostty.app ]; }
 has_herdr() { command -v herdr >/dev/null 2>&1; }
@@ -66,8 +78,8 @@ add_line() { # file line
   say "added to $1: $2"
 }
 
-remove_line() { # file line
-  [ -f "$1" ] && grep -qxF "$2" "$1" || return 0
+remove_line() { # file line; returns 1 when the line wasn't there
+  [ -f "$1" ] && grep -qxF "$2" "$1" || return 1
   backup "$1"
   grep -vxF "$2" "$1" >"$1.agentfork-tmp" || true
   mv "$1.agentfork-tmp" "$1"
@@ -122,10 +134,30 @@ install_rex() {
   say "keys: ctrl+b>c copy, ctrl+b>v paste, ctrl+b>right fork into a split"
 }
 
+reload_skhd() {
+  if skhd -r >/dev/null 2>&1; then
+    say "reloaded skhd"
+  elif skhd --restart-service >/dev/null 2>&1; then
+    say "restarted skhd"
+  else
+    say "reload skhd with: skhd -r"
+  fi
+}
+
 install_ghostty() {
   step "Ghostty"
-  add_line "$(ghostty_config)" "$GHOSTTY_LINE"
-  reload_ghostty
+  if ! command -v skhd >/dev/null 2>&1; then
+    say "Ghostty's keybindings can't run programs, so agentfork needs skhd:"
+    say "  brew install jackielii/tap/skhd-zig && skhd --install-service"
+    say "then run this again."
+    return 0
+  fi
+  link "$repo/adapters/ghostty/ghostty.sh" "$BIN_DIR/agentfork-ghostty"
+  add_line "$(skhd_config)" "$SKHD_LINE"
+  reload_skhd
+  if remove_line "$(ghostty_config)" "$GHOSTTY_OLD_LINE"; then
+    reload_ghostty
+  fi
   say "keys: cmd+alt+c copy, cmd+alt+v paste, cmd+alt+right fork into a split"
 }
 
@@ -148,11 +180,17 @@ uninstall() {
   unlink_ours "$BIN_DIR/agentfork" "$repo/bin/agentfork"
   unlink_ours "$REX_DIR/agentfork.lua" "$repo/adapters/rex/agentfork.lua"
   if [ -f "$REX_DIR/init.lua" ] && grep -qxF -e "$REX_LINE" -e "$REX_OLD_LINE" "$REX_DIR/init.lua"; then
-    remove_line "$REX_DIR/init.lua" "$REX_LINE"
-    remove_line "$REX_DIR/init.lua" "$REX_OLD_LINE"
+    remove_line "$REX_DIR/init.lua" "$REX_LINE" || true
+    remove_line "$REX_DIR/init.lua" "$REX_OLD_LINE" || true
     reload_rex
   fi
-  remove_line "$(ghostty_config)" "$GHOSTTY_LINE"
+  unlink_ours "$BIN_DIR/agentfork-ghostty" "$repo/adapters/ghostty/ghostty.sh"
+  if remove_line "$(skhd_config)" "$SKHD_LINE"; then
+    reload_skhd
+  fi
+  if remove_line "$(ghostty_config)" "$GHOSTTY_OLD_LINE"; then
+    reload_ghostty
+  fi
   if has_herdr && herdr plugin list 2>/dev/null | grep -q '^- agentfork .*local:'; then
     herdr plugin unlink agentfork >/dev/null && say "unlinked herdr plugin agentfork"
   fi

@@ -1,0 +1,23 @@
+# agentfork keys for Ghostty, as skhd hotkeys. `make install ghostty` adds
+#   .load "/path/to/handoff/adapters/ghostty/agentfork.skhdrc"
+# to your skhd config and links adapters/ghostty/ghostty.sh to
+# ~/.local/bin/agentfork-ghostty.
+#
+# Ghostty's own keybindings can't run programs, so skhd runs the script, which
+# drives Ghostty over AppleScript. The keys only act in Ghostty; everywhere
+# else they pass through untouched.
+
+cmd + alt - c [
+    "Ghostty" : "$HOME/.local/bin/agentfork-ghostty" copy
+    *         ~
+]
+
+cmd + alt - v [
+    "Ghostty" : "$HOME/.local/bin/agentfork-ghostty" paste
+    *         ~
+]
+
+cmd + alt - right [
+    "Ghostty" : "$HOME/.local/bin/agentfork-ghostty" fork
+    *         ~
+]

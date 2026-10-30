@@ -44,6 +44,9 @@ Commands:
 Options for copy and fork:
   --pid PID   A process in the focused pane, such as its shell or Claude
               itself (repeatable). Its conversation is used if it has one.
+  --cwd DIR   The focused pane's directory, for terminals that can't report
+              its process. Only conversations running there are considered,
+              when there are any.
   --pick      Always ask which conversation.
   --notify    Also report the result as a desktop notification.
   --quiet     Print nothing on success.
@@ -270,17 +273,39 @@ pick() {
   load_pid "${choice%%$'\t'*}"
 }
 
+# Keep only the candidates on stdin whose conversation runs in directory $1.
+in_dir() {
+  local act pid
+  while IFS=$'\t' read -r act pid; do
+    load_pid "$pid" || continue
+    [ "$R_CWD" != "$1" ] || printf '%s\t%s\n' "$act" "$pid"
+  done
+}
+
 # Load into R_* the conversation the user means.
 choose() {
-  local all recent
+  local all recent here=""
   if [ $# -gt 0 ] && resolve_pids "$@"; then
-    return 0
-  fi
-  if [ "$PICK" != 1 ] && ancestor_session; then
     return 0
   fi
 
   all="$(candidates)"
+  # The pane's directory names its conversation when exactly one runs there,
+  # and narrows the choice when several do.
+  if [ -n "$CWD" ] && [ -n "$all" ]; then
+    here="$(printf '%s\n' "$all" | in_dir "$CWD")"
+    if [ -n "$here" ]; then
+      all="$here"
+      if [ "$PICK" != 1 ] && [ "$(printf '%s\n' "$all" | wc -l)" -eq 1 ]; then
+        load_pid "${all#*$'\t'}"
+        return 0
+      fi
+    fi
+  fi
+  if [ -z "$here" ] && [ "$PICK" != 1 ] && ancestor_session; then
+    return 0
+  fi
+
   [ -n "$all" ] || die "no Claude Code conversations are running."
   if [ "$PICK" != 1 ]; then
     if [ "$(printf '%s\n' "$all" | wc -l)" -eq 1 ]; then
@@ -321,12 +346,18 @@ save() {
 
 parse_choose_args() {
   PIDS=()
+  CWD=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --pid)
         [ $# -ge 2 ] || die "--pid needs a value."
         case "$2" in '' | *[!0-9]*) die "--pid needs a number, got '$2'." ;; esac
         PIDS+=("$2")
+        shift 2
+        ;;
+      --cwd)
+        [ $# -ge 2 ] || die "--cwd needs a value."
+        CWD="${2%/}"
         shift 2
         ;;
       --pick) PICK=1; shift ;;

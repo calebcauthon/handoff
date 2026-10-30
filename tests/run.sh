@@ -116,6 +116,16 @@ session "$c" cccc /work/three 900
 "$AF" copy --quiet >/dev/null
 check "single active conversation is used" [ "$(copied_id)" = bbbb ]
 
+# --- without a pid: --cwd narrows to the pane's directory --------------------
+reset
+session "$a" aaaa /work/one 300
+session "$b" bbbb /work/two 900
+"$AF" copy --quiet --cwd /work/two/ >/dev/null
+check "--cwd picks the conversation in that directory" [ "$(copied_id)" = bbbb ]
+session "$c" cccc /work/three 3
+"$AF" copy --quiet --cwd /nowhere >/dev/null
+check "--cwd with no match falls back to the active one" [ "$(copied_id)" = cccc ]
+
 # --- several active and no terminal: exit 3 so the adapter opens a picker ----
 reset
 session "$a" aaaa /work/one 2
