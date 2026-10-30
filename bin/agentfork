@@ -121,6 +121,12 @@ age() {
   fi
 }
 
+# The session process $1 was started with --resume (or -r), if any.
+resumed_from() {
+  ps -o command= -p "$1" 2>/dev/null |
+    sed -n -e 's/.*--resume[= ]\{1,\}\([^ ]*\).*/\1/p' -e 's/.* -r \{1,\}\([^ ]*\).*/\1/p' | head -1
+}
+
 # The transcript of session $1 started in directory $2. Claude stores it under
 # the directory's path with every non-alphanumeric character turned into "-".
 transcript_for() {
@@ -143,7 +149,7 @@ transcript_for() {
 # Returns 0 when it can be forked, 2 when it is a live Claude process with no
 # messages yet, and 1 when the pid isn't a live interactive Claude process.
 load_pid() {
-  local file="$CLAUDE_HOME/sessions/$1.json" fields rec_start kind started t
+  local file="$CLAUDE_HOME/sessions/$1.json" fields rec_start kind started t parent
   [ -f "$file" ] || return 1
   fields="$(jq -r '[.sessionId // "", .cwd // "", .name // "", .status // "",
       ((.updatedAt // 0) / 1000 | floor | tostring), .procStart // "", .kind // ""]
@@ -159,7 +165,14 @@ load_pid() {
     return 1
   fi
 
-  R_TRANSCRIPT="$(transcript_for "$R_ID" "$R_CWD")" || return 2
+  if ! R_TRANSCRIPT="$(transcript_for "$R_ID" "$R_CWD")"; then
+    # A fork that hasn't been spoken to yet has no transcript of its own, but
+    # it is still the conversation it was resumed from, so fork that one.
+    parent="$(resumed_from "$1")"
+    [ -n "$parent" ] && [ "$parent" != "$R_ID" ] || return 2
+    R_TRANSCRIPT="$(transcript_for "$parent" "$R_CWD")" || return 2
+    R_ID="$parent"
+  fi
   t="$(mtime "$R_TRANSCRIPT")"
   R_ACTIVE=$((t > R_UPDATED ? t : R_UPDATED))
   return 0

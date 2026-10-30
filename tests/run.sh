@@ -100,6 +100,16 @@ check "empty conversation fails" [ "$rc" = 1 ]
 check "empty conversation explains" grep -q "no messages yet" <<<"$out"
 check "empty conversation copies nothing" [ ! -f "$AGENTFORK_STATE_DIR/clipboard.json" ]
 
+# --- a fresh fork has no transcript yet; its parent is the same conversation --
+reset
+perl -e 'sleep 600' --resume aaaa --fork-session >/dev/null 2>&1 &
+pids+=($!); forked=$!
+sleep 0.2
+session "$a" aaaa /work/one 500
+session "$forked" ffff /work/one 5 no
+"$AF" copy --quiet --pid "$forked" >/dev/null
+check "unspoken fork copies its parent" [ "$(copied_id)" = aaaa ]
+
 # --- stale session files (reused pid) are ignored ----------------------------
 reset
 session "$a" stale /work/one 5 yes "Mon Jan 1 00:00:00 2001"
