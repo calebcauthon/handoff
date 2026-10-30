@@ -1,4 +1,4 @@
-# agentfork
+# handoff
 
 Copy a Claude Code conversation in one pane, paste it as a fork in another.
 Works in Rex, herdr and Ghostty; the clipboard is shared between them.
@@ -42,13 +42,15 @@ Paste into a pane sitting at a shell prompt. The fork is `claude --resume <id>
 --fork-session` in the original directory; the original is untouched.
 
 Copy takes the focused pane's conversation. Where the terminal can't say what's
-in the pane (Ghostty), it takes the one conversation active in the last 30
-seconds, or asks.
+in the pane (Ghostty), it goes by the pane's directory, then the one
+conversation active in the last 30 seconds, then asks.
 
 ## More
 
 `make install` installs for every terminal found; `make uninstall` undoes it.
 Keys already bound to something else are left alone and reported.
+
+The CLI behind the keys is `agentfork`:
 
 ```
 agentfork copy [--pid PID]... [--pick] [--notify] [--quiet]
