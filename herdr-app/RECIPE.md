@@ -77,9 +77,10 @@ files next to it are one build of it.
 - Copy is exact only because herdr-core reports the terminal's foreground pid.
   Without pids it falls back to the folder, then to the one conversation
   active in the last 30 seconds, then to the picker.
-- Start the work before closing the popup only through `exec`/`hc`, which
-  start their programs at the call: the view's tasks are cancelled when the
-  overlay closes. The build spawns the action and then closes.
+- Closing the overlay cancels the view's tasks, so the popup must stay open
+  until the action's steps (`hc get`, `agentfork`, `pane.split` or `hc
+  send`) have run; the heading shows "copy…" / "paste…" / "fork…" meanwhile,
+  then it closes. Closing first and spawning the work after loses the work.
 - `cmd-alt-a` is free in Herdr's defaults; `cmd-alt-c/v` were left alone
   because they're the Ghostty adapter's keys and `cmd-alt-h` hides other
   apps on macOS. On Linux and Windows bind `ctrl-alt-a` instead.

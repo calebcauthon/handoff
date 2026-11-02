@@ -40,6 +40,7 @@ export default class Handoff extends View {
   init(_props, cx) {
     this.clip = null;
     this.busy = false;
+    this.working = null;
     // Only the popup takes the keyboard; a docked copy just listens.
     this.popup = Boolean(props()?.overlay);
     if (this.popup) {
@@ -145,8 +146,9 @@ export default class Handoff extends View {
     }
   }
 
-  // The popup's key: act, then close. The work keeps running after the
-  // popup goes, since exec and hc start their programs at the call.
+  // The popup's key: act, then close. The popup stays open while the action
+  // runs, because closing it cancels the view's tasks, and the action needs
+  // several steps (hc get, agentfork, pane.split) in order.
   key(e, cx) {
     cx.stop_propagation();
     const k = e.key;
@@ -156,8 +158,17 @@ export default class Handoff extends View {
       : k === "right" || k === "f" ? "fork"
       : undefined;
     if (action === undefined) return;
-    this.dismiss();
-    if (action) cx.spawn(async () => { await this.command(action); });
+    if (!action) return this.dismiss();
+    if (this.working) return;
+    this.working = action;
+    cx.notify();
+    cx.spawn(async () => {
+      try {
+        await this.command(action);
+      } finally {
+        this.dismiss();
+      }
+    });
   }
 
   describe() {
@@ -175,7 +186,7 @@ export default class Handoff extends View {
     return root
       .child(h_flex().justify_between().items_center()
         .child(div().font_semibold().child("Handoff"))
-        .child(div().text_color(t.muted).child("Esc cancel")))
+        .child(div().text_color(t.muted).child(this.working ? `${this.working}…` : "Esc cancel")))
       .child(h_flex().gap(6).items_center().text_color(copied ? t.foreground : t.muted)
         .child(div().text_color(t.dim).child("clipboard"))
         .child(div().flex_1().truncate().child(this.describe())))
